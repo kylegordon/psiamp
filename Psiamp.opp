@@ -1,0 +1,751 @@
+rem Code 1030 keydown
+rem code 1031 keyup
+
+	declare external
+	
+	include "System.oxh"
+	include "Const.oph"
+	rem include "toolbar.oph"
+	rem	include "PsiAmp.oph"
+		
+	external about:
+	external backup:
+	external decode:
+	external dispinfo:
+	external drawbar:(play%,pause%,stop%,backward%,forward%)
+	external editinfo:
+	external exit:
+	external genfill:
+	external help:
+	external infowinprint:(text$)
+	external init:
+	external main:
+	external mainwinprint:(text$)
+	external nextEv%:
+	external offrCmd%:(key&,modif&)
+	external rsset:(baud%,parity%,data%,stop%,hand%,term&)
+	
+PROC main:
+	REM Version 2, after I lost the original one (maybe I 
+	REM should keep backups - see proc: backup). Time to 
+	REM bring in asynchronous comms and other stuff
+
+	global buf$(255)
+	global label$(255)
+	global data$(255)
+	
+	global genlist1$(255)
+	global genlist2$(255)
+	global genlist3$(255)
+	global genlist4$(255)
+	global genlist5$(255)
+	
+	global infowin%
+	global mainwin%
+	
+	global choice%
+	global id%
+	global artist$(255)
+	global title$(255)
+	global album$(255)
+	global genre$(255,100)
+	global genre%
+
+	global HotKMod% rem modifier for hot-key
+	
+	global ev&(16)
+	global datfile$(12)
+	local SerRxBuf$(255)
+	local SerRxBuf%
+	local ser%
+	global evnt%
+	local c%
+	local iocnum%
+
+rem	external KEvaType		
+	global command$(255),cmdletter$(1)
+	global evType&
+rem	global command$(255)
+	global justentered%
+	iocnum%=1
+
+	init: 
+
+  infowinprint:("Testing port settings")
+  LOPEN "TTY:A"
+rem  LOADM "rsset"
+rem  rsset:(16,0,8,1,0,&0)
+rem  LPRINT "Port OK" :LPRINT
+rem	infowinprint:("Welcome sent")
+	backup:
+	genfill:
+	
+	buf$ = "artist>Basement Jaxx"
+	decode:
+	buf$ = "title>Red Alert"
+	decode:
+rem	infowinprint:(artist$ + " - " + title$)
+	do			  				rem main loop
+		REM Clear the event array
+		rem mainwinprint:("Mainloop")
+		rem ev&(1) = 0
+		rem print ADDR(SerRxBuf$)+1
+		rem print iocnum%
+		REM Read one byte from the serial port
+		rem ioc(-1,1,ser%,#ADDR(SerRxBuf%)+1,1)
+		rem ioc(-1,1,ser%,#ADDR(SerRxBuf%)+1,iocnum%)
+		rem IOC(h%,f%,var status%,var a1,var a2)	
+		rem print "About to geteventa32"	
+		REM Do a geteventa32 cos we need the keyboard
+		geteventa32 evnt%,ev&()
+		
+		rem print "iowaiting"
+		REM Wait for something to happen
+		IOWAIT
+		
+		rem print "poke byte"
+		REM When something happens, check which of the above is returned by checknig to see if ser% and evnt% is NOT -46. If serial data has been buffered, read the first byte returned by the ioc
+		POKEB ADDR(SerRxBuf$),1
+		
+		REM Then move this byte somehwere else and read any more data
+		IOW(-1,10,c%,#0)
+			
+		REM The amunt buffered is returned in c%, which you can then read with an IOC for c% bytes (make sure c% is smaller than your buffer)
+		if c%>255
+			c%=255
+		endif
+		IOW(-1,1,#ADDR(SerRxBuf$)+1,c%)
+		POKEB ADDR(SerRxBuf$),c%
+			
+		rem mainwindowprint:("ev&(1) = ", ev&(1)
+		rem	mainwinprint:("This is a test")
+		rem	print "evnt% = ", evnt%
+		rem	print "c% = ", c%
+		rem mainwinprint:("SerRxBuf$ = " + SerRxBuf$)
+		rem	print "SerRxBuf% = ", SerRxBuf%
+		rem	pause 2
+		rem	cls	
+	
+		nextEv%:
+		evType&=ev&(KEvaType%)
+
+		rem mainwinprint:(gen$(evtype&,4))
+		rem pause 10
+		
+		if ev&(KEvAPtrOplWindowId%)=Mainwin%
+			if (evType&=KEvPtrEnter&)
+				justEntered%=KTrue%	rem next drawing is not relative to prev point
+				continue
+			endif
+			if (evType&=KEvPtrExit&)
+				justEntered%=KTrue%	rem next drawing is not relative to prev point
+				mainwinprint:("kevptrexit")
+				continue
+			endif
+			
+		endif
+		if evType&=KEvPtr&
+			if ev&(KEvAPtrType%)=KEvPtrDrag&
+				infowinprint:("Stop dragging me bitch! " + gen$(ev&(6),3) + ", " + gen$(ev&(7),3))
+				if justEntered%
+					justEntered%=KFalse%
+				endif
+			elseif ev&(KEvAPtrType%)=KEvPtrButton1Down&
+				justEntered%=KFalse%
+				REM Now find out where it is and what to do
+				if (ev&(6) < 120) and (ev&(7) < 50) REM Play button
+					drawbar:(1,0,0,0,0)
+				elseif (ev&(6) > 130) and (ev&(6) < 252) and (ev&(7) < 50) REM Pause button
+					drawbar:(0,1,0,0,0)
+				elseif (ev&(6) > 260) and (ev&(6) < 382) and (ev&(7) < 50) REM Stop button
+					drawbar:(0,0,1,0,0)
+				elseif (ev&(6) > 390) and (ev&(6) < 512) and (ev&(7) < 50) REM Backward button
+				drawbar:(0,0,0,1,0)
+				elseif (ev&(6) > 520) and (ev&(6) < 642) and (ev&(7) < 50) REM Forward button
+					drawbar:(0,0,0,0,1)
+				else
+				infowinprint:("Pen down at " + gen$(ev&(6),3) + ", " + gen$(ev&(7),3))
+		endif
+			elseif ev&(KEvAPtrType%)=KEvPtrButton1Up&
+				justEntered%=KFalse%
+				REM Now find out where it was and what to do
+				if (ev&(6) > 360) and (ev&(6) < 480) and (ev&(7) < 50) REM Backward button
+					drawbar:(0,0,0,0,0)
+				elseif (ev&(6) > 480) and (ev&(6) < 600) and (ev&(7) < 50) REM Forward button
+					drawbar:(0,0,0,0,0)
+				else
+					infowinprint:("Pen up at " + gen$(ev&(6),3) + ", " + gen$(ev&(7),3))
+				endif	
+			endif
+		else
+			if ev&(KEvaType%) and &400
+				if (evType&<>KEvKeyUp&) and (evType&<>KEvKeyDown&)
+					mainwinprint:("Ev(&"+hex$(ev&(KEvaType%))+")")
+				endif
+			elseif (ev&(KEvaType%)<32 or ev&(KEvaType%)>255)
+				mainwinprint:("<"+chr$(ev&(KEvaType%))+">")
+			else
+				mainwinprint:(chr$(ev&(KEvaType%)))
+			endif
+		endif
+	until 0
+	
+	rem	editinfo:
+	decode:
+	rem	menu:
+	
+	REM We should never get here, but...
+	mainwinprint:("About to finish abnormally")
+	get
+ENDP
+
+proc nextEv%:
+	external evType&
+	external ev&()
+	external command$
+	external cmdletter$
+	external hotKMod%
+	external mainwin%
+	external evnt%
+rem	external KEvAPtrOplWindowId%
+	while 1
+		evType& = ev&(KEvaType%) REM KEvaType% = 1 in const.oph
+rem		mainwinprint:("evType is " + gen$(evType&,4))
+rem		mainwinprint:("evnt% is " + gen$(evnt%,4))
+rem		pause 10
+		
+rem		mainwinprint:(gen$(KKeyMenu%,6))
+rem		if (evType& AND KEvNotKeyMask&)=0
+			REM Anything in here is a keypress
+rem			if ev&(1) = 27
+rem				exit:
+rem			elseif ev&(1) = 290
+rem				infowinprint:("Menu")
+rem				menu:
+rem			elseif (ev&(1) > 65) and (ev&(1) < 400)
+rem				rem infowinprint:(chr$(ev&(1)))
+rem			endif
+rem		elseif ev&(1) = $408 REM Pen event
+rem			REM Anything in here is a screen action
+rem			screenscan:
+rem		elseif ev&(1) = $40A REM Pen exits screen
+rem			infowinPrint:("Pen out")
+
+		if evType&=KEvCommand&
+rem			mainwinprint:(gen$()
+			command$=getcmd$
+			cmdLetter$=left$(command$,1)
+			command$=right$(command$,len(command$)-1)
+			mainwinprint:("In command routine " + command$)
+			get
+			if cmdLetter$="X"
+				exit:
+rem				cmdE%:
+			elseif cmdLetter$="O"
+rem				openFile:(command$)
+			elseif cmdLetter$="C"
+rem				createFile:(command$)
+			endif
+		elseif evType&=KEvPtr&
+rem			mainwinprint:("Pointer routine")
+			break
+rem			if not TBarOffer%:(ev&(KEvAPtrOplWindowId%),ev&(KEvAPtrType%),ev&(KEvAPtrPositionX%),ev&(KEvAPtrPositionY%)) rem Handles tbar events
+rem				break
+rem			endif
+		elseif (evType&=KEvPtrEnter&) and (ev&(KEvAPtrOplWindowId%)=mainwin%)
+			break
+		elseif (evType&=KEvPtrExit&) and (ev&(KEvAPtrOplWindowId%)=mainwin%)
+			break
+		elseif evType&=0 rem Null event
+			mainwinprint:("Null event")
+			continue
+		elseif evType&=27
+			exit:
+		elseif (evType&=KKeySidebarMenu%) or ((evType& and $400)=0)
+			mainwinprint:("Detected menu request")
+			if (evType&<>KKeySidebarMenu%) and (evType&<>KKeyMenu%) and ((ev&(KEvAKMod%) and HotKMod%)=0)
+				mainwinprint:("Doing something")
+				break
+			endif
+			if not offrCmd%:(ev&(KEvaType%),ev&(KEvAKMod%))	rem ret -1 if command, else 0
+				mainwinprint:("offrCmd% returned -1")
+				break
+			endif
+		else
+rem			mainwinprint:("Something else happened")
+			break
+		endif
+		
+	endwh
+endp
+
+proc offrCmd%:(key&,modif&)
+	rem Returns -1 if command (menu or hot-key)
+	rem also -1 if menu-key and cancelled
+
+	local isMenuK%
+	external HotKmod%
+	local MenuPos%
+	global m%, k%,cmdRoot$(4)
+	local mod%
+	local hotK%
+
+	mod%=modif&
+	k%=key&
+rem	infowinprint:(gen$(k%,4))
+	mainwinprint:("In offrcmd " + gen$(k%,6))
+	if (k%=KKeyMenu%) or (k%=KKeySidebarMenu%)
+		isMenuK%=-1
+		mInit
+			mCard "File","Close",%x
+			mCard "Song","Next",%n,"Previous",%p,"Edit details",%e
+		m%=menu(MenuPos%)
+		if m%=%x 
+			exit:
+		elseif m%=%n
+			mainwinprint:("Next")
+		elseif m%=%p
+			mainwinprint:("Previous")
+		elseif m%=%e
+			editinfo:
+		endif
+	endif
+endp
+
+PROC init:
+rem	SETBACKLIGHTBEHAVIOR:(1)
+rem	SETBACKLIGHTON:(1)
+	external infowin%
+	external mainwin%
+	external datfile$
+	local fullpath$(255)
+	local path$(255)
+	local pos%
+	local char$(1)
+	
+	infowin% = gcreate(0,200,640,40,5,5)
+	mainwin% = gcreate(0,50,640,150,5,5) 
+
+	drawbar:(0,0,1,0,0)
+	gborder 0
+	datfile$ = "choons.dat"
+	fullpath$ = cmd$(2)
+	if fullpath$ = ""
+		REM This should only take effect if run from the IDE
+		fullpath$ = "c:\Documents\Programming\PsiAmp\psiamp.opo"
+		infowinprint:("Using development pathname")
+	endif
+	pos% = len(fullpath$)
+	do
+		char$ = mid$(fullpath$,pos%,1)
+		if char$ <> "\" : pos% = pos% - 1 : endif
+	until char$="\"
+	path$=left$(fullpath$,pos%)
+	IF NOT EXIST(path$ + datfile$)
+		CREATE path$ + datfile$,A,names$
+	ELSE
+		OPEN path$ + datfile$,A,names$
+	ENDIF
+ENDP
+
+PROC mainwinprint:(text$)
+	external mainwin%
+	guse mainwin%
+	gat 10,150
+	gfont 12
+	gscroll 0,-15,10,10,630,140
+	gat 10,150
+	gprint text$	
+ENDP
+
+PROC infowinprint:(text$)
+	external infowin%
+	guse infowin%
+	gcls
+	gat 10,30
+	gfont 12
+	gstyle 8
+	gprint text$
+ENDP
+
+PROC decode:
+	external char$, buf$, label$, data$, artist$, album$, title$
+
+	REM Take the input string, everything preceding the ">"
+	REM is the label and everything after is the data.
+	REM Later I will add functionality to carry on data
+	REM in a following data packet
+	REM VAL = string to number v=VAL(string$)
+	REM GEN = number to string g$=gen$(x,y%) y% is length
+	local pos%,char$(1)
+	pos% = 1
+	do
+		char$ = mid$(buf$,pos%,1)
+		if char$ <> ">" : pos% = pos% + 1 : endif
+	until char$=">"
+	label$ = lower$(left$(buf$,pos% - 1))
+	data$ = right$(buf$,len(buf$) - pos%)
+	if label$ = "artist"
+		artist$ = data$
+	elseif label$ = "title"
+		title$ = data$
+	elseif label$ = "album"
+		album$ = data$
+	endif
+	
+ENDP
+
+PROC drawbar:(play%,pause%,stop%,backward%,forward%)
+	REM Draws the toolbar at the top of the screen
+	guse 1
+	gat 0,0 : gbutton "Play",2,122,50,play%
+	gat 130,0 : gbutton "Pause",2,122,50,pause%
+	gat 260,0 : gbutton "Stop",2,122,50,stop%
+	gat 390,0 : gbutton "Backward",2,122,50,backward%
+	gat 520,0 : gbutton "Forward",2,122,50,forward%
+
+	
+rem	global skipbackwid%
+rem	global playwid%
+rem	global stopwid%
+rem	global pausewid%
+rem	global skipforwardwid%
+rem	playwid% = gcreate(1,0,122,50,1,1) : gborder 1
+rem	stopwid% = gcreate(130,0,122,50,1,1) : gborder 1
+rem	pausewid% = gcreate(259,0,122,50,1,1) : gborder 1
+rem	skipforwardwid% = gcreate(388,0,122,50,1,1) : gborder 1
+rem	skipbackwid% = gcreate(517,0,122,50,1,1) : gborder 1
+	
+rem	guse playwid%
+rem	gat 0,0 : gfill 122,50,0	
+rem	gat 51,15 
+	
+rem	guse stopwid%
+rem	gat 0,0 : gfill 122,50,0
+rem	gat 51,15 :	gfill 20,20,2
+rem
+rem	guse pausewid%
+rem	gat 0,0 : gfill 122,50,0
+rem	gat 51,15 : gfill 8,20,2
+rem	gat 61,15 : gfill 8,20,2
+	
+rem	guse skipforwardwid%
+rem	gat 0,0 : gfill 122,50,0
+	
+rem	guse skipbackwid%
+rem	gat 0,0 : gfill 122,50,0
+	
+ENDP
+
+PROC dispinfo:
+	external id%,artist$,title$,album$
+
+	REM Displays song info
+	print id%
+	print artist$
+	print title$
+	print album$
+ENDP
+
+PROC editinfo:
+	external id%,artist$,title$,album$,genre%,genlist1$,genlist2$,genlist3$,genlist4$,genlist5$
+	REM Displays dialog with song info for editing
+	
+	dinit "Editing"
+	dedit artist$, "Artist", 30
+	dedit title$, "Title", 30
+	dedit album$, "Album", 30
+
+	dCHOICE genre%,"Genre",genlist1$+",..."
+	dCHOICE genre%,"Genre",genlist2$+",..."
+	dCHOICE genre%,"",genlist3$+",..."
+	dCHOICE genre%,"",genlist4$+",..."
+	dCHOICE genre%,"",genlist5$
+	
+	dbuttons "Next",%n,"Prev",%p,"Save",%s,"Exit",%x
+	dialog
+	mainwinprint:("Genre is"+gen$(genre%,4))
+ENDP
+
+PROC genfill:
+	external genre$(),genlist1$,genlist2$,genlist3$,genlist4$,genlist5$
+
+	local gid% REM genre id
+	genre$(1) = "Classic Rock"
+	genre$(2) = "Country"
+	genre$(3) = "Dance"
+	genre$(4) = "Disco"
+	genre$(5) = "Funk"
+	genre$(6) = "Grunge"
+	genre$(7) = "Hip-hop"
+	genre$(8) = "Jazz"
+	genre$(9) = "Metal"
+	genre$(10) = "New Age"
+	genre$(11) = "Oldies"
+	genre$(12) = "Other"
+	genre$(13) = "Pop"
+	genre$(14) = "R&B"
+	genre$(15) = "Rap"
+	genre$(16) = "Reggae"
+	genre$(17) = "Rock"
+	genre$(18) = "Techno"
+	genre$(19) = "Industrial"
+	genre$(20) = "Alternative"
+	genre$(21) = "Ska"
+	genre$(22) = "Death Metal"
+	genre$(23) = "Pranks"
+	genre$(24) = "Soundtrack"
+	genre$(25) = "Euro-techno"
+	genre$(26) = "Ambient"
+	genre$(27) = "Trip-hop"
+	genre$(28) = "Vocal"
+	genre$(29) = "Jazz & funk"
+	genre$(30) = "Fusion"
+	genre$(31) = "Trance"
+	genre$(32) = "Classical"
+	genre$(33) = "Instrumental"
+	genre$(34) = "Acid"
+	genre$(35) = "House"
+	genre$(36) = "Game"
+	genre$(37) = "Sound clip"
+	genre$(38) = "Gospel"
+	genre$(39) = "Noice"
+	genre$(40) = "Alternative Rock"
+	genre$(41) = "Bass"
+	genre$(42) = "Soul"
+	genre$(43) = "Punk"
+	genre$(44) = "Space"
+	genre$(45) = "Meditative"
+	genre$(46) = "Instrumental Pop"
+	genre$(47) = "Instrumental Rock"
+	genre$(48) = "Ethnic"
+	genre$(49) = "Gothic"
+	genre$(50) = "Darkave"
+	genre$(51) = "Techno-industrial"
+	genre$(52) = "Electronic"
+	genre$(53) = "Pop-folk"
+	genre$(54) = "Eurodance"
+	genre$(55) = "Dream"
+	genre$(56) = "Southern Rock"
+	genre$(57) = "Comedy"
+	genre$(58) = "Cult"
+	genre$(59) = "Gangsta"
+	genre$(60) = "Top 40"
+	genre$(61) = "Christian Rap"
+	genre$(62) = "Pop/funk"
+	genre$(63) = "Jungle"
+	genre$(64) = "Native American"
+	genre$(65) = "Cabaret"
+	genre$(66) = "New Wave"
+	genre$(67) = "Pyschadelic"
+	genre$(68) = "Rave"
+	genre$(69) = "Showtunes"
+	genre$(70) = "Trailer"
+	genre$(71) = "Lo-fi"
+	genre$(72) = "Tribal"
+	genre$(73) = "Acid Punk"
+	genre$(74) = "Acid Jazz"
+	genre$(75) = "Polka"
+	genre$(76) = "Retro"
+	genre$(77) = "Musical"
+	genre$(78) = "Rock & Roll"
+	genre$(79) = "Hard Rock"
+	
+	genre$(81) = "Folk-rock"
+	genre$(82) = "National Rock"
+	genre$(83) = "Swing"
+	genre$(84) = "Fast fusion"
+	genre$(85) = "Bebob"
+	genre$(86) = "Latin"
+	genre$(87) = "Revival"
+	genre$(88) = "Celtic"
+	genre$(89) = "Bluegrass"
+	genre$(90) = "Avantgarde"
+	genre$(91) = "Gothic Rock"
+	genre$(92) = "Progressive Rock"
+	genre$(93) = "Psychadelic Rock"
+	genre$(94) = "Symphonic Rock"
+	genre$(95) = "Slow Rock"
+	genre$(96) = "Big Band"
+	genre$(97) = "Chorus"
+	genre$(98) = "Easy Listeing"
+	genre$(99) = "Achoustic"
+	genre$(100) = "Humour"
+	genre$(101) = "Speech"
+	genre$(102) = "Chanson"
+	genre$(103) = "Opera"
+	genre$(104) = "Chamber Music"
+	genre$(105) = "Sonata"
+	genre$(106) = "Sonata"
+	genre$(107) = "Booty Bass"
+	genre$(108) = "Primus"
+	genre$(109) = "Porn Groove"
+	genre$(110) = "Satire"
+	genre$(111) = "Slow Jam"
+	genre$(112) = "Club"
+	genre$(113) = "Tango"
+	genre$(114) = "Samba"
+	genre$(115) = "Folklore"
+	genre$(116) = "Ballad"
+	genre$(117) = "Power Ballad"
+	genre$(118) = "Rythmic Soul"
+	genre$(119) = "Freestyle"
+	genre$(120) = "Duet"
+	genre$(121) = "Punk Rock"
+	genre$(122) = "Drum Solo"
+	genre$(123) = "A Capella"
+	genre$(124) = "Euro-house"
+	genre$(125) = "Dance Hall"
+	
+	gid% = 1
+	REM ====List 1=====
+	do
+		if genre$(gid%) <> ""
+			genlist1$ = genlist1$ + "," + genre$(gid%)
+		endif
+		gid% = gid% + 1
+	until (len(genlist1$) >= 240) or (gid% = 200)	
+	REM ====List 2====
+	do
+		if genre$(gid%) <> ""
+			genlist2$ = genlist2$ + "," + genre$(gid%)
+		endif
+		gid% = gid% + 1
+	until (len(genlist2$) >= 240) or (gid% = 200)
+	REM ====List 3====
+	do
+		if genre$(gid%) <> ""
+			genlist3$ = genlist3$ + "," + genre$(gid%)
+		endif
+		gid% = gid% + 1
+	until (len(genlist3$) >= 240) or (gid% = 200)
+	REM ====List 4====
+	do
+		if genre$(gid%) <> ""
+			genlist4$ = genlist4$ + "," + genre$(gid%)
+		endif
+		gid% = gid% + 1
+	until (len(genlist4$) >= 240) or (gid% = 200)
+	REM ====List 5====
+	do
+		if genre$(gid%) <> ""
+			genlist5$ = genlist5$ + "," + genre$(gid%)
+		endif
+		gid% = gid% + 1
+	until (len(genlist5$) >= 245) or (gid% = 200)
+	if left$(genlist1$,1) = ","
+		genlist1$ = right$(genlist1$,(len(genlist1$)-1))
+	endif
+	if left$(genlist2$,1) = ","
+		genlist2$ = right$(genlist2$,(len(genlist2$)-1))
+	endif
+	if left$(genlist3$,1) = ","
+		genlist3$ = right$(genlist3$,(len(genlist3$)-1))
+	endif
+	if left$(genlist4$,1) = ","
+		genlist4$ = right$(genlist4$,(len(genlist4$)-1))
+	endif
+	if left$(genlist5$,1) = ","
+		genlist5$ = right$(genlist5$,(len(genlist5$)-1))
+	endif
+ENDP
+
+PROC backup:
+	REM Psiwin is junk. It doesn't work and when it does it 
+	REM always crashes during backup
+	REM Transmit psiamp.opl to computer, preceded with a few headers
+ENDP
+
+PROC exit:
+rem	dinit "Do you wish to shut down the computer?"
+rem	dbuttons "Yes",%y,"No",%n
+rem	choice% = dialog
+rem	if choice% = %y 
+		infowinprint:("Shutting down computer")
+rem	elseif choice% = %n
+rem		infowinprint:("Leaving computer on")
+rem	endif
+	infowinprint:("Saving and exiting")
+  LCLOSE
+	stop
+ENDP
+
+rem proc cmdX%:
+rem	external ExitHK%
+rem	if ExitHK%=%x
+rem		stop
+rem	endif
+rem	rem If %x on S5 defined, do it here
+rem	raise -99	rem procedure not found
+rem endp
+
+
+PROC rsset:(baud%,parity%,data%,stop%,hand%,term&)
+  LOCAL frame%,srchar%(6),dummy%,err%
+  frame%=data%-5
+  IF stop%=2 :frame%=frame% OR 16 :ENDIF
+  IF parity% :frame%=frame% OR 32 :ENDIF
+  srchar%(1)=baud% OR (baud%*256)
+  srchar%(2)=frame% OR (parity%*256)
+  srchar%(3)=(hand% AND 255) OR $1100
+  srchar%(4)=$13
+  POKEL ADDR(srchar%(5)),term&
+  err%=IOW(-1,7,srchar%(1),dummy%)
+  IF err% :RAISE err% :ENDIF
+ENDP
+
+PROC about:
+	dinit "About PsiAmp"
+rem	dbuttons "OK", %
+	dialog
+ENDP
+
+PROC help:
+	rem For GetEvent32
+	rem Array indexes
+	rem const KEvAType%=1
+	rem const KEvATime%=2
+	
+	rem event array keypress subscripts
+	rem const KEvAKMod%=4
+	rem const KEvAKRep%=5
+	
+	rem Pointer event array subscripts
+	rem const KEvAPtrOplWindowId%=3
+	rem const KEvAPtrWindowId%=3
+	rem const KEvAPtrType%=4
+	rem const KEvAPtrModifiers%=5
+	rem const KEvAPtrPositionX%=6
+	rem const KEvAPtrPositionY%=7
+	rem const KEvAPtrScreenPosX%=8
+	rem const KEvAPtrScreenPosY%=9
+	
+	rem Event types
+	rem const KEvNotKeyMask&=&400
+	rem const KEvFocusGained&=&401
+	rem const KEvFocusLost&=&402
+	rem const KEvSwitchOn&=&403
+	rem const KEvCommand&=&404
+	rem const KEvDateChanged&=&405
+	rem const KEvKeyDown&=&406
+	rem const KEvKeyUp&=&407
+	rem const KEvPtr&=&408
+	rem const KEvPtrEnter&=&409
+	rem const KEvPtrExit&=&40A
+	
+	rem Pointer event types
+	rem const KEvPtrPenDown&=0
+	rem const KEvPtrPenUp&=1
+	rem const KEvPtrButton1Down&=KEvPtrPenDown&
+	rem const KEvPtrButton1Up&=KEvPtrPenUp&
+	rem const KEvPtrButton2Down&=2
+	rem const KEvPtrButton2Up&=3
+	rem const KEvPtrButton3Down&=4
+	rem const KEvPtrButton3Up&=5
+	rem const KEvPtrDrag&=6
+	rem const KEvPtrMove&=7
+	rem const KEvPtrButtonRepeat&=8
+	rem const KEvPtrSwitchOn&=9
+	
+	print "Find somebody else"	
+ENDP
